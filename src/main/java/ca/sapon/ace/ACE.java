@@ -33,6 +33,9 @@ import java.util.WeakHashMap;
 import com.google.common.base.Optional;
 import com.google.inject.Inject;
 
+import ca.sapon.jici.SourceException;
+import ca.sapon.jici.SourceMetadata;
+import ca.sapon.jici.decoder.Decoder;
 import ca.sapon.jici.evaluator.Environment;
 import ca.sapon.jici.evaluator.Environment.Variable;
 import ca.sapon.jici.evaluator.value.ObjectValue;
@@ -88,7 +91,9 @@ public class ACE {
             addVariable(environment, "printer", new Printer(source));
             environments.put(source, environment);
         }
+        final SourceMetadata metadata = new SourceMetadata(code);
         try {
+            code = Decoder.decode(code, metadata);
             final List<Token> tokens = Lexer.lex(code);
             if (tokens.isEmpty()) {
                 source.sendMessage(Texts.of(TextColors.DARK_RED, "Nothing to evaluate"));
@@ -109,9 +114,18 @@ public class ACE {
                         TextColors.DARK_GREEN, " Value: ", TextColors.RESET, value.asString()
                 ));
             }
+        } catch (SourceException exception) {
+            printMultiLineMessage(source, metadata.generateErrorMessage(exception));
         } catch (Exception exception) {
-            source.sendMessage(Texts.of(TextColors.DARK_RED, exception.getMessage()));
+            source.sendMessage(Texts.of(TextColors.DARK_RED, "Unknown exception, see console"));
             exception.printStackTrace();
+        }
+    }
+
+    private void printMultiLineMessage(CommandSource source, String message) {
+        final String[] lines = message.split("\n");
+        for (String line : lines) {
+            source.sendMessage(Texts.of(TextColors.DARK_RED, line));
         }
     }
 
@@ -157,10 +171,11 @@ public class ACE {
         }
         if (entry instanceof Variable) {
             final Variable variable = (Variable) entry;
+            final Text valueText = variable.initialized() ? Texts.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().asString()) : Texts.of();
             return Texts.of(
                     TextColors.DARK_GREEN, "Name: ", TextColors.RESET, variable.getName(),
                     TextColors.DARK_GREEN, " Type: ", TextColors.RESET, variable.getType().getName(),
-                    TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().asString()
+                    valueText
             );
         }
         return Texts.of(entry);
@@ -179,7 +194,7 @@ public class ACE {
     }
 
     private static void addVariable(Environment environment, String name, Object variable) {
-        environment.declareVariable(new Identifier(name), ObjectValueType.of(variable.getClass()), ObjectValue.of(variable));
+        environment.declareVariable(Identifier.from(name, 0), ObjectValueType.of(variable.getClass()), ObjectValue.of(variable));
     }
 
     private class ACEEval implements CommandCallable {
