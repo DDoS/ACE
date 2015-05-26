@@ -42,7 +42,6 @@ buildscript {
     dependencies {
         classpath 'nl.javadude.gradle.plugins:license-gradle-plugin:0.7.0'
         classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.1'
-
     }
 }
 

@@ -25,9 +25,11 @@ package ca.sapon.ace;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 import com.google.common.base.Optional;
@@ -110,8 +112,8 @@ public class ACE {
                 final ValueType type = expression.getValueType(environment);
                 final Value value = expression.getValue(environment);
                 source.sendMessage(Texts.of(
-                        TextColors.DARK_GREEN, "Type: ", TextColors.RESET, type.getName(),
-                        TextColors.DARK_GREEN, " Value: ", TextColors.RESET, value.asString()
+                        TextColors.DARK_GREEN, "Type: ", TextColors.RESET, type.toString(),
+                        TextColors.DARK_GREEN, " Value: ", TextColors.RESET, value.toString()
                 ));
             }
         } catch (SourceException exception) {
@@ -160,21 +162,21 @@ public class ACE {
         for (int i = 0; i < end; i++) {
             final Object entry = iterator.next();
             if (i >= start) {
-                source.sendMessage(entryToString(entry));
+                source.sendMessage(entryToText(entry));
             }
         }
     }
 
-    private Text entryToString(Object entry) {
+    private Text entryToText(Object entry) {
         if (entry instanceof Class) {
             return Texts.of(TextColors.DARK_GREEN, ((Class) entry).getCanonicalName());
         }
         if (entry instanceof Variable) {
             final Variable variable = (Variable) entry;
-            final Text valueText = variable.initialized() ? Texts.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().asString()) : Texts.of();
+            final Text valueText = variable.initialized() ? Texts.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().toString()) : Texts.of();
             return Texts.of(
                     TextColors.DARK_GREEN, "Name: ", TextColors.RESET, variable.getName(),
-                    TextColors.DARK_GREEN, " Type: ", TextColors.RESET, variable.getType().getName(),
+                    TextColors.DARK_GREEN, " Type: ", TextColors.RESET, variable.getType().toString(),
                     valueText
             );
         }
