@@ -120,7 +120,7 @@ public class ACE {
             printMultiLineMessage(source, metadata.generateErrorMessage(exception));
         } catch (Exception exception) {
             source.sendMessage(Texts.of(TextColors.DARK_RED, "Unknown exception, see console"));
-            exception.printStackTrace();
+            logger.error("Error while evaluating code", exception);
         }
     }
 
