@@ -133,8 +133,19 @@ public class ACE {
 
     private void printImports(CommandSource source, int page) {
         if (validateInfoArguments(source, page)) {
-            printEntries(source, environments.get(source).getClasses(), page);
+            printEntries(source, filterJavaLangClasses(environments.get(source).getClasses()), page);
         }
+    }
+
+    private Collection<Class<?>> filterJavaLangClasses(Collection<Class<?>> classes) {
+        final Set<Class<?>> filtered = new HashSet<Class<?>>();
+        for (Class<?> _class : classes) {
+            final String name = _class.getCanonicalName();
+            if (!name.startsWith("java.lang.") || name.indexOf('.', 10) != -1) {
+                filtered.add(_class);
+            }
+        }
+        return filtered;
     }
 
     private void printVariables(CommandSource source, int page) {
