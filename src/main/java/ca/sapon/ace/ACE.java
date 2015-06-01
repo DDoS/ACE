@@ -34,24 +34,8 @@ import java.util.WeakHashMap;
 
 import com.google.common.base.Optional;
 import com.google.inject.Inject;
-
-import ca.sapon.jici.SourceException;
-import ca.sapon.jici.SourceMetadata;
-import ca.sapon.jici.decoder.Decoder;
-import ca.sapon.jici.evaluator.Environment;
-import ca.sapon.jici.evaluator.Environment.Variable;
-import ca.sapon.jici.evaluator.value.ObjectValue;
-import ca.sapon.jici.evaluator.value.Value;
-import ca.sapon.jici.evaluator.value.type.ObjectValueType;
-import ca.sapon.jici.evaluator.value.type.ValueType;
-import ca.sapon.jici.lexer.Identifier;
-import ca.sapon.jici.lexer.Lexer;
-import ca.sapon.jici.lexer.Token;
-import ca.sapon.jici.lexer.TokenID;
-import ca.sapon.jici.parser.Parser;
-import ca.sapon.jici.parser.expression.Expression;
-import ca.sapon.jici.parser.statement.Statement;
 import org.slf4j.Logger;
+
 import org.spongepowered.api.Game;
 import org.spongepowered.api.event.Subscribe;
 import org.spongepowered.api.event.state.ServerStartingEvent;
@@ -66,6 +50,24 @@ import org.spongepowered.api.util.command.CommandException;
 import org.spongepowered.api.util.command.CommandResult;
 import org.spongepowered.api.util.command.CommandSource;
 
+import ca.sapon.jici.SourceException;
+import ca.sapon.jici.SourceMetadata;
+import ca.sapon.jici.SourceMetadata.ErrorInformation;
+import ca.sapon.jici.decoder.Decoder;
+import ca.sapon.jici.evaluator.Environment;
+import ca.sapon.jici.evaluator.Environment.Variable;
+import ca.sapon.jici.evaluator.type.ClassType;
+import ca.sapon.jici.evaluator.type.Type;
+import ca.sapon.jici.evaluator.value.ObjectValue;
+import ca.sapon.jici.evaluator.value.Value;
+import ca.sapon.jici.lexer.Identifier;
+import ca.sapon.jici.lexer.Lexer;
+import ca.sapon.jici.lexer.Token;
+import ca.sapon.jici.lexer.TokenID;
+import ca.sapon.jici.parser.Parser;
+import ca.sapon.jici.parser.expression.Expression;
+import ca.sapon.jici.parser.statement.Statement;
+
 @Plugin(id = "ace", name = "ACE", version = "0.0.1")
 public class ACE {
     private static final int ENTRIES_PER_PAGE = 5;
@@ -75,7 +77,7 @@ public class ACE {
     private Game game;
     @Inject
     private PluginContainer instance;
-    private final Map<CommandSource, Environment> environments = new WeakHashMap<CommandSource, Environment>();
+    private final Map<CommandSource, ACEUser> users = new WeakHashMap<CommandSource, ACEUser>();
 
     @Subscribe
     public void onServerStarting(ServerStartingEvent event) {
@@ -84,130 +86,13 @@ public class ACE {
         commandDispatcher.register(instance, new ACEContext(), "acec");
     }
 
-    private void eval(CommandSource source, String code) {
-        Environment environment = environments.get(source);
-        if (environment == null) {
-            environment = new Environment();
-            addVariable(environment, "game", game);
-            addVariable(environment, "me", source);
-            addVariable(environment, "printer", new Printer(source));
-            environments.put(source, environment);
+    private ACEUser getUser(CommandSource source) {
+        ACEUser user = users.get(source);
+        if (user == null) {
+            user = new ACEUser(source);
+            users.put(source, user);
         }
-        final SourceMetadata metadata = new SourceMetadata(code);
-        try {
-            code = Decoder.decode(code, metadata);
-            final List<Token> tokens = Lexer.lex(code);
-            if (tokens.isEmpty()) {
-                source.sendMessage(Texts.of(TextColors.DARK_RED, "Nothing to evaluate"));
-                return;
-            }
-            if (tokens.get(tokens.size() - 1).getID() == TokenID.SYMBOL_SEMICOLON) {
-                final List<Statement> statements = Parser.parse(tokens);
-                for (Statement statement : statements) {
-                    statement.execute(environment);
-                }
-                source.sendMessage(Texts.of(TextColors.DARK_GREEN, "Success"));
-            } else {
-                final Expression expression = Parser.parseExpression(tokens);
-                final ValueType type = expression.getValueType(environment);
-                final Value value = expression.getValue(environment);
-                source.sendMessage(Texts.of(
-                        TextColors.DARK_GREEN, "Type: ", TextColors.RESET, type.toString(),
-                        TextColors.DARK_GREEN, " Value: ", TextColors.RESET, value.toString()
-                ));
-            }
-        } catch (SourceException exception) {
-            printMultiLineMessage(source, metadata.generateErrorMessage(exception));
-        } catch (Exception exception) {
-            source.sendMessage(Texts.of(TextColors.DARK_RED, "Unknown exception, see console"));
-            logger.error("Error while evaluating code", exception);
-        }
-    }
-
-    private void printMultiLineMessage(CommandSource source, String message) {
-        final String[] lines = message.split("\n");
-        for (String line : lines) {
-            source.sendMessage(Texts.of(TextColors.DARK_RED, line));
-        }
-    }
-
-    private void printImports(CommandSource source, int page) {
-        if (validateInfoArguments(source, page)) {
-            printEntries(source, filterJavaLangClasses(environments.get(source).getClasses()), page);
-        }
-    }
-
-    private Collection<Class<?>> filterJavaLangClasses(Collection<Class<?>> classes) {
-        final Set<Class<?>> filtered = new HashSet<Class<?>>();
-        for (Class<?> _class : classes) {
-            final String name = _class.getCanonicalName();
-            if (!name.startsWith("java.lang.") || name.indexOf('.', 10) != -1) {
-                filtered.add(_class);
-            }
-        }
-        return filtered;
-    }
-
-    private void printVariables(CommandSource source, int page) {
-        if (validateInfoArguments(source, page)) {
-            printEntries(source, environments.get(source).getVariables(), page);
-        }
-    }
-
-    private void resetEnvironment(CommandSource source) {
-        final Environment environment = environments.remove(source);
-        source.sendMessage(environment == null
-                        ? Texts.of(TextColors.DARK_RED, "No active context")
-                        : Texts.of(TextColors.DARK_GREEN, "Context deleted")
-        );
-    }
-
-    private void printEntries(CommandSource source, Collection<?> entries, int page) {
-        final int start = (page - 1) * ENTRIES_PER_PAGE;
-        final int end = Math.min(start + ENTRIES_PER_PAGE, entries.size());
-        if (end <= start) {
-            source.sendMessage(Texts.of(TextColors.DARK_RED, "No entries for page ", page));
-            return;
-        }
-        final Iterator<?> iterator = entries.iterator();
-        for (int i = 0; i < end; i++) {
-            final Object entry = iterator.next();
-            if (i >= start) {
-                source.sendMessage(entryToText(entry));
-            }
-        }
-    }
-
-    private Text entryToText(Object entry) {
-        if (entry instanceof Class) {
-            return Texts.of(TextColors.DARK_GREEN, ((Class) entry).getCanonicalName());
-        }
-        if (entry instanceof Variable) {
-            final Variable variable = (Variable) entry;
-            final Text valueText = variable.initialized() ? Texts.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().toString()) : Texts.of();
-            return Texts.of(
-                    TextColors.DARK_GREEN, "Name: ", TextColors.RESET, variable.getName(),
-                    TextColors.DARK_GREEN, " Type: ", TextColors.RESET, variable.getType().toString(),
-                    valueText
-            );
-        }
-        return Texts.of(entry);
-    }
-
-    private boolean validateInfoArguments(CommandSource source, int page) {
-        if (!environments.containsKey(source)) {
-            source.sendMessage(Texts.of(TextColors.DARK_RED, "No active context"));
-            return false;
-        }
-        if (page < 1) {
-            source.sendMessage(Texts.of(TextColors.DARK_RED, "Page must be a number greater or equal to 1"));
-            return false;
-        }
-        return true;
-    }
-
-    private static void addVariable(Environment environment, String name, Object variable) {
-        environment.declareVariable(Identifier.from(name, 0), ObjectValueType.of(variable.getClass()), ObjectValue.of(variable));
+        return user;
     }
 
     private class ACEEval implements CommandCallable {
@@ -238,7 +123,7 @@ public class ACE {
 
         @Override
         public Optional<CommandResult> process(CommandSource source, String argumentString) throws CommandException {
-            eval(source, argumentString);
+            getUser(source).eval(argumentString);
             return Optional.of(CommandResult.success());
         }
     }
@@ -273,31 +158,191 @@ public class ACE {
         public Optional<CommandResult> process(CommandSource source, String argumentString) throws CommandException {
             final String[] arguments = argumentString.split(" ");
             final String command = arguments[0];
-            final int page = arguments.length >= 2 ? tryParseInt(arguments[1]) : 1;
+            final int page = arguments.length >= 2 ? parseIntWithDefault(arguments[1], -1) : 1;
             if (command.equals("imports")) {
-                printImports(source, page);
+                getUser(source).printImports(page);
                 return Optional.of(CommandResult.success());
             }
             if (command.equals("variables")) {
-                printVariables(source, page);
+                getUser(source).printVariables(page);
                 return Optional.of(CommandResult.success());
             }
             if (command.equals("reset")) {
-                resetEnvironment(source);
+                getUser(source).resetEnvironment();
                 return Optional.of(CommandResult.success());
             }
             throw new CommandException(Texts.of("Unknown command: ", command));
         }
 
-        private int tryParseInt(String string) {
+        private int parseIntWithDefault(String string, int _default) {
             try {
                 return Integer.parseInt(string);
             } catch (NumberFormatException exception) {
-                return -1;
+                return _default;
             }
         }
     }
 
+    private class ACEUser {
+        private final CommandSource user;
+        private Environment environment;
+        private StringBuilder sourceBuffer = null;
+
+        public ACEUser(CommandSource user) {
+            this.user = user;
+        }
+
+        private void eval(String code) {
+            if (environment == null) {
+                createEnvironment();
+            }
+            if (code.endsWith("#")) {
+                if (sourceBuffer == null) {
+                    sourceBuffer = new StringBuilder();
+                }
+                sourceBuffer.append(code.substring(0, code.length() - 1));
+                sendACEMessage(user, Texts.of(TextColors.DARK_GREEN, "Buffered code"));
+                return;
+            }
+            if (sourceBuffer != null) {
+                code = sourceBuffer.append(code).toString();
+                sourceBuffer = null;
+            }
+            final SourceMetadata metadata = new SourceMetadata(code);
+            try {
+                code = Decoder.decode(code, metadata);
+                final List<Token> tokens = Lexer.lex(code);
+                if (tokens.isEmpty()) {
+                    sendACEMessage(user, Texts.of(TextColors.DARK_RED, "Nothing to evaluate"));
+                    return;
+                }
+                if (tokens.get(tokens.size() - 1).getID() == TokenID.SYMBOL_SEMICOLON) {
+                    final List<Statement> statements = Parser.parse(tokens);
+                    for (Statement statement : statements) {
+                        statement.execute(environment);
+                    }
+                    sendACEMessage(user, Texts.of(TextColors.DARK_GREEN, "Success"));
+                } else {
+                    final Expression expression = Parser.parseExpression(tokens);
+                    final Type type = expression.getType(environment);
+                    final Value value = expression.getValue(environment);
+                    sendACEMessage(user, Texts.of(
+                            TextColors.DARK_GREEN, "Type: ", TextColors.RESET, type.getName(),
+                            TextColors.DARK_GREEN, " Value: ", TextColors.RESET, value.asString()
+                    ));
+                }
+            } catch (SourceException exception) {
+                displayError(metadata.generateErrorInformation(exception));
+            } catch (Exception exception) {
+                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "Unknown exception, see console"));
+                logger.error("Error while evaluating code", exception);
+            }
+        }
+
+        private void createEnvironment() {
+            environment = new Environment();
+            addVariable("game", game);
+            addVariable("me", user);
+            addVariable("printer", new Printer(user));
+        }
+
+        private void addVariable(String name, Object variable) {
+            environment.declareVariable(Identifier.from(name, 0), ClassType.of(variable.getClass()), ObjectValue.of(variable));
+        }
+
+        private void displayError(ErrorInformation error) {
+            sendACEMessage(user, Texts.of(TextColors.DARK_RED, error.getMessage()));
+            final String line = error.getLine() + " ";
+            final int start = error.getStartIndex();
+            final int end = error.getEndIndex() + 1;
+            String problem = line.substring(start, end);
+            if (problem.length() == 1 && Character.isWhitespace(problem.charAt(0))) {
+                problem = "_";
+            }
+            sendACEMessage(user, Texts.of(
+                    line.substring(0, start),
+                    TextColors.DARK_RED, problem,
+                    TextColors.RESET, line.substring(end)
+            ));
+        }
+
+        private void printImports(int page) {
+            if (validateInfoArguments(page)) {
+                printEntries(filterJavaLangClasses(environment.getClasses()), page);
+            }
+        }
+
+        private Collection<Class<?>> filterJavaLangClasses(Collection<Class<?>> classes) {
+            final Set<Class<?>> filtered = new HashSet<Class<?>>();
+            for (Class<?> _class : classes) {
+                final String name = _class.getCanonicalName();
+                if (!name.startsWith("java.lang.") || name.indexOf('.', 10) != -1) {
+                    filtered.add(_class);
+                }
+            }
+            return filtered;
+        }
+
+        private void printVariables(int page) {
+            if (validateInfoArguments(page)) {
+                printEntries(environment.getVariables(), page);
+            }
+        }
+
+        private boolean validateInfoArguments(int page) {
+            if (environment == null) {
+                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "No active context"));
+                return false;
+            }
+            if (page < 1) {
+                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "Page must be a number greater or equal to 1"));
+                return false;
+            }
+            return true;
+        }
+
+        private void printEntries(Collection<?> entries, int page) {
+            final int start = (page - 1) * ENTRIES_PER_PAGE;
+            final int end = Math.min(start + ENTRIES_PER_PAGE, entries.size());
+            if (end <= start) {
+                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "No entries for page ", page));
+                return;
+            }
+            final Iterator<?> iterator = entries.iterator();
+            for (int i = 0; i < end; i++) {
+                final Object entry = iterator.next();
+                if (i >= start) {
+                    sendACEMessage(user, entryToText(entry));
+                }
+            }
+        }
+
+        private Text entryToText(Object entry) {
+            if (entry instanceof Class) {
+                return Texts.of(TextColors.DARK_GREEN, ((Class) entry).getCanonicalName());
+            }
+            if (entry instanceof Variable) {
+                final Variable variable = (Variable) entry;
+                final Text valueText = variable.initialized() ? Texts.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().asString()) : Texts.of();
+                return Texts.of(
+                        TextColors.DARK_GREEN, "Name: ", TextColors.RESET, variable.getName(),
+                        TextColors.DARK_GREEN, " Type: ", TextColors.RESET, variable.getType().getName(),
+                        valueText
+                );
+            }
+            return Texts.of(entry);
+        }
+
+        private void resetEnvironment() {
+            sendACEMessage(user, environment == null
+                            ? Texts.of(TextColors.DARK_RED, "No active context")
+                            : Texts.of(TextColors.DARK_GREEN, "Context deleted")
+            );
+            environment = null;
+        }
+    }
+
+    @SuppressWarnings("unused")
     public static class Printer {
         private final CommandSource receiver;
 
@@ -342,7 +387,11 @@ public class ACE {
         }
 
         public void print(String message) {
-            receiver.sendMessage(Texts.of(message));
+            sendACEMessage(receiver, Texts.of(message));
         }
+    }
+
+    private static void sendACEMessage(CommandSource source, Text message) {
+        source.sendMessage(Texts.of(TextColors.BLUE, "[ACE] ", TextColors.RESET, message));
     }
 }
