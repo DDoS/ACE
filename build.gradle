@@ -1,5 +1,5 @@
 // Default tasks
-defaultTasks 'licenseFormatMain', 'licenseFormatTest', 'clean', 'build', 'shadowJar'
+defaultTasks 'licenseFormatMain', 'licenseFormatTest', 'build', 'shadowJar'
 
 apply plugin: 'java'
 apply plugin: 'license'
