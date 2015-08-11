@@ -122,9 +122,9 @@ public class ACE {
         }
 
         @Override
-        public Optional<CommandResult> process(CommandSource source, String argumentString) throws CommandException {
+        public CommandResult process(CommandSource source, String argumentString) throws CommandException {
             getUser(source).eval(argumentString);
-            return Optional.of(CommandResult.success());
+            return CommandResult.success();
         }
     }
 
@@ -155,21 +155,21 @@ public class ACE {
         }
 
         @Override
-        public Optional<CommandResult> process(CommandSource source, String argumentString) throws CommandException {
+        public CommandResult process(CommandSource source, String argumentString) throws CommandException {
             final String[] arguments = argumentString.split(" ");
             final String command = arguments[0];
             final int page = arguments.length >= 2 ? parseIntWithDefault(arguments[1], -1) : 1;
             if (command.equals("imports")) {
                 getUser(source).printImports(page);
-                return Optional.of(CommandResult.success());
+                return CommandResult.success();
             }
             if (command.equals("variables")) {
                 getUser(source).printVariables(page);
-                return Optional.of(CommandResult.success());
+                return CommandResult.success();
             }
             if (command.equals("reset")) {
                 getUser(source).resetEnvironment();
-                return Optional.of(CommandResult.success());
+                return CommandResult.success();
             }
             throw new CommandException(Texts.of("Unknown command: ", command));
         }
