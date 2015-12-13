@@ -29,26 +29,26 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-import com.google.common.base.Optional;
 import com.google.inject.Inject;
 import org.slf4j.Logger;
 
 import org.spongepowered.api.Game;
-import org.spongepowered.api.event.Subscribe;
-import org.spongepowered.api.event.state.ServerStartingEvent;
+import org.spongepowered.api.command.CommandCallable;
+import org.spongepowered.api.command.CommandException;
+import org.spongepowered.api.command.CommandManager;
+import org.spongepowered.api.command.CommandResult;
+import org.spongepowered.api.command.CommandSource;
+import org.spongepowered.api.event.Listener;
+import org.spongepowered.api.event.game.state.GameAboutToStartServerEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.plugin.PluginContainer;
-import org.spongepowered.api.service.command.CommandService;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.Texts;
 import org.spongepowered.api.text.format.TextColors;
-import org.spongepowered.api.util.command.CommandCallable;
-import org.spongepowered.api.util.command.CommandException;
-import org.spongepowered.api.util.command.CommandResult;
-import org.spongepowered.api.util.command.CommandSource;
 
 import ca.sapon.jici.SourceException;
 import ca.sapon.jici.SourceMetadata;
@@ -68,8 +68,9 @@ import ca.sapon.jici.parser.Parser;
 import ca.sapon.jici.parser.expression.Expression;
 import ca.sapon.jici.parser.statement.Statement;
 
-@Plugin(id = "ace", name = "ACE", version = "0.0.1")
+@Plugin(id = "ACE", name = "ACE", version = ACE.VERSION)
 public class ACE {
+    public static final String VERSION = "0.0.1";
     private static final int ENTRIES_PER_PAGE = 5;
     @Inject
     private Logger logger;
@@ -77,13 +78,15 @@ public class ACE {
     private Game game;
     @Inject
     private PluginContainer instance;
-    private final Map<CommandSource, ACEUser> users = new WeakHashMap<CommandSource, ACEUser>();
+    private final Map<CommandSource, ACEUser> users = new WeakHashMap<>();
 
-    @Subscribe
-    public void onServerStarting(ServerStartingEvent event) {
-        final CommandService commandDispatcher = game.getCommandDispatcher();
+    @Listener
+    public void onServerStarting(GameAboutToStartServerEvent event) {
+        final Game game = event.getGame();
+        final CommandManager commandDispatcher = game.getCommandManager();
         commandDispatcher.register(instance, new ACEEval(), "acee");
         commandDispatcher.register(instance, new ACEContext(), "acec");
+        logger.info("Loaded ACE v{}", VERSION);
     }
 
     private ACEUser getUser(CommandSource source) {
@@ -107,12 +110,12 @@ public class ACE {
         }
 
         @Override
-        public Optional<Text> getShortDescription(CommandSource source) {
+        public Optional<? extends Text> getShortDescription(CommandSource source) {
             return Optional.of((Text) Texts.of("Evaluates Java expressions and statement"));
         }
 
         @Override
-        public Optional<Text> getHelp(CommandSource source) {
+        public Optional<? extends Text> getHelp(CommandSource source) {
             return Optional.of(getUsage(source));
         }
 
@@ -273,7 +276,7 @@ public class ACE {
         }
 
         private Collection<Class<?>> filterJavaLangClasses(Collection<Class<?>> classes) {
-            final Set<Class<?>> filtered = new HashSet<Class<?>>();
+            final Set<Class<?>> filtered = new HashSet<>();
             for (Class<?> _class : classes) {
                 final String name = _class.getCanonicalName();
                 if (!name.startsWith("java.lang.") || name.indexOf('.', 10) != -1) {
@@ -335,8 +338,8 @@ public class ACE {
 
         private void resetEnvironment() {
             sendACEMessage(user, environment == null
-                            ? Texts.of(TextColors.DARK_RED, "No active context")
-                            : Texts.of(TextColors.DARK_GREEN, "Context deleted")
+                    ? Texts.of(TextColors.DARK_RED, "No active context")
+                    : Texts.of(TextColors.DARK_GREEN, "Context deleted")
             );
             environment = null;
         }
