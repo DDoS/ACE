@@ -1,7 +1,7 @@
 /*
  * This file is part of ACE, licensed under the MIT License (MIT).
  *
- * Copyright (c) 2015-2015 Aleksi Sapon <http://sapon.ca/JICI/>
+ * Copyright (c) 2015-2016 Aleksi Sapon <http://sapon.ca/JICI/>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,7 +47,6 @@ import org.spongepowered.api.event.game.state.GameAboutToStartServerEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.text.Text;
-import org.spongepowered.api.text.Texts;
 import org.spongepowered.api.text.format.TextColors;
 
 import ca.sapon.jici.SourceException;
@@ -56,7 +55,7 @@ import ca.sapon.jici.SourceMetadata.ErrorInformation;
 import ca.sapon.jici.decoder.Decoder;
 import ca.sapon.jici.evaluator.Environment;
 import ca.sapon.jici.evaluator.Environment.Variable;
-import ca.sapon.jici.evaluator.type.ClassType;
+import ca.sapon.jici.evaluator.type.LiteralReferenceType;
 import ca.sapon.jici.evaluator.type.Type;
 import ca.sapon.jici.evaluator.value.ObjectValue;
 import ca.sapon.jici.evaluator.value.Value;
@@ -68,7 +67,10 @@ import ca.sapon.jici.parser.Parser;
 import ca.sapon.jici.parser.expression.Expression;
 import ca.sapon.jici.parser.statement.Statement;
 
-@Plugin(id = "ACE", name = "ACE", version = ACE.VERSION)
+@Plugin(id = "ca.sapon.ace", name = "ACE", version = ACE.VERSION,
+        description = "A JICI interface for SpongeAPI",
+        authors = {"Aleksi \"DDoS\" Sapon"},
+        url = "https://github.com/DDoS/ACE")
 public class ACE {
     public static final String VERSION = "0.0.1";
     private static final int ENTRIES_PER_PAGE = 5;
@@ -82,7 +84,6 @@ public class ACE {
 
     @Listener
     public void onServerStarting(GameAboutToStartServerEvent event) {
-        final Game game = event.getGame();
         final CommandManager commandDispatcher = game.getCommandManager();
         commandDispatcher.register(instance, new ACEEval(), "acee");
         commandDispatcher.register(instance, new ACEContext(), "acec");
@@ -111,7 +112,7 @@ public class ACE {
 
         @Override
         public Optional<? extends Text> getShortDescription(CommandSource source) {
-            return Optional.of((Text) Texts.of("Evaluates Java expressions and statement"));
+            return Optional.of(Text.of("Evaluates Java expressions and statement"));
         }
 
         @Override
@@ -121,7 +122,7 @@ public class ACE {
 
         @Override
         public Text getUsage(CommandSource source) {
-            return Texts.of("acee expression | statement");
+            return Text.of("acee expression | statement");
         }
 
         @Override
@@ -144,7 +145,7 @@ public class ACE {
 
         @Override
         public Optional<Text> getShortDescription(CommandSource source) {
-            return Optional.of((Text) Texts.of("Manage the source's ACE context"));
+            return Optional.of(Text.of("Manage the source's ACE context"));
         }
 
         @Override
@@ -154,7 +155,7 @@ public class ACE {
 
         @Override
         public Text getUsage(CommandSource source) {
-            return Texts.of("imports [page] | variables [page] | reset");
+            return Text.of("imports [page] | variables [page] | reset");
         }
 
         @Override
@@ -174,7 +175,7 @@ public class ACE {
                 getUser(source).resetEnvironment();
                 return CommandResult.success();
             }
-            throw new CommandException(Texts.of("Unknown command: ", command));
+            throw new CommandException(Text.of("Unknown command: ", command));
         }
 
         private int parseIntWithDefault(String string, int _default) {
@@ -204,7 +205,7 @@ public class ACE {
                     sourceBuffer = new StringBuilder();
                 }
                 sourceBuffer.append(code.substring(0, code.length() - 1));
-                sendACEMessage(user, Texts.of(TextColors.DARK_GREEN, "Buffered code"));
+                sendACEMessage(user, Text.of(TextColors.DARK_GREEN, "Buffered code"));
                 return;
             }
             if (sourceBuffer != null) {
@@ -216,7 +217,7 @@ public class ACE {
                 code = Decoder.decode(code, metadata);
                 final List<Token> tokens = Lexer.lex(code);
                 if (tokens.isEmpty()) {
-                    sendACEMessage(user, Texts.of(TextColors.DARK_RED, "Nothing to evaluate"));
+                    sendACEMessage(user, Text.of(TextColors.DARK_RED, "Nothing to evaluate"));
                     return;
                 }
                 if (tokens.get(tokens.size() - 1).getID() == TokenID.SYMBOL_SEMICOLON) {
@@ -224,12 +225,12 @@ public class ACE {
                     for (Statement statement : statements) {
                         statement.execute(environment);
                     }
-                    sendACEMessage(user, Texts.of(TextColors.DARK_GREEN, "Success"));
+                    sendACEMessage(user, Text.of(TextColors.DARK_GREEN, "Success"));
                 } else {
                     final Expression expression = Parser.parseExpression(tokens);
                     final Type type = expression.getType(environment);
                     final Value value = expression.getValue(environment);
-                    sendACEMessage(user, Texts.of(
+                    sendACEMessage(user, Text.of(
                             TextColors.DARK_GREEN, "Type: ", TextColors.RESET, type.getName(),
                             TextColors.DARK_GREEN, " Value: ", TextColors.RESET, value.asString()
                     ));
@@ -237,7 +238,7 @@ public class ACE {
             } catch (SourceException exception) {
                 displayError(metadata.generateErrorInformation(exception));
             } catch (Exception exception) {
-                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "Unknown exception, see console"));
+                sendACEMessage(user, Text.of(TextColors.DARK_RED, "Unknown exception, see console"));
                 logger.error("Error while evaluating code", exception);
             }
         }
@@ -245,16 +246,18 @@ public class ACE {
         private void createEnvironment() {
             environment = new Environment();
             addVariable("game", game);
+            addVariable("ace", instance);
             addVariable("me", user);
             addVariable("printer", new Printer(user));
+            addVariable("logger", logger);
         }
 
         private void addVariable(String name, Object variable) {
-            environment.declareVariable(Identifier.from(name, 0), ClassType.of(variable.getClass()), ObjectValue.of(variable));
+            environment.declareVariable(Identifier.from(name, 0), LiteralReferenceType.of(variable.getClass()), ObjectValue.of(variable));
         }
 
         private void displayError(ErrorInformation error) {
-            sendACEMessage(user, Texts.of(TextColors.DARK_RED, error.getMessage()));
+            sendACEMessage(user, Text.of(TextColors.DARK_RED, error.getMessage()));
             final String line = error.getLine() + " ";
             final int start = error.getStartIndex();
             final int end = error.getEndIndex() + 1;
@@ -262,7 +265,7 @@ public class ACE {
             if (problem.length() == 1 && Character.isWhitespace(problem.charAt(0))) {
                 problem = "_";
             }
-            sendACEMessage(user, Texts.of(
+            sendACEMessage(user, Text.of(
                     line.substring(0, start),
                     TextColors.DARK_RED, problem,
                     TextColors.RESET, line.substring(end)
@@ -294,11 +297,11 @@ public class ACE {
 
         private boolean validateInfoArguments(int page) {
             if (environment == null) {
-                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "No active context"));
+                sendACEMessage(user, Text.of(TextColors.DARK_RED, "No active context"));
                 return false;
             }
             if (page < 1) {
-                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "Page must be a number greater or equal to 1"));
+                sendACEMessage(user, Text.of(TextColors.DARK_RED, "Page must be a number greater or equal to 1"));
                 return false;
             }
             return true;
@@ -308,7 +311,7 @@ public class ACE {
             final int start = (page - 1) * ENTRIES_PER_PAGE;
             final int end = Math.min(start + ENTRIES_PER_PAGE, entries.size());
             if (end <= start) {
-                sendACEMessage(user, Texts.of(TextColors.DARK_RED, "No entries for page ", page));
+                sendACEMessage(user, Text.of(TextColors.DARK_RED, "No entries for page ", page));
                 return;
             }
             final Iterator<?> iterator = entries.iterator();
@@ -322,24 +325,24 @@ public class ACE {
 
         private Text entryToText(Object entry) {
             if (entry instanceof Class) {
-                return Texts.of(TextColors.DARK_GREEN, ((Class) entry).getCanonicalName());
+                return Text.of(TextColors.DARK_GREEN, ((Class) entry).getCanonicalName());
             }
             if (entry instanceof Variable) {
                 final Variable variable = (Variable) entry;
-                final Text valueText = variable.initialized() ? Texts.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().asString()) : Texts.of();
-                return Texts.of(
+                final Text valueText = variable.initialized() ? Text.of(TextColors.DARK_GREEN, " Value: ", TextColors.RESET, variable.getValue().asString()) : Text.of();
+                return Text.of(
                         TextColors.DARK_GREEN, "Name: ", TextColors.RESET, variable.getName(),
                         TextColors.DARK_GREEN, " Type: ", TextColors.RESET, variable.getType().getName(),
                         valueText
                 );
             }
-            return Texts.of(entry);
+            return Text.of(entry);
         }
 
         private void resetEnvironment() {
             sendACEMessage(user, environment == null
-                    ? Texts.of(TextColors.DARK_RED, "No active context")
-                    : Texts.of(TextColors.DARK_GREEN, "Context deleted")
+                    ? Text.of(TextColors.DARK_RED, "No active context")
+                    : Text.of(TextColors.DARK_GREEN, "Context deleted")
             );
             environment = null;
         }
@@ -390,11 +393,11 @@ public class ACE {
         }
 
         public void print(String message) {
-            sendACEMessage(receiver, Texts.of(message));
+            sendACEMessage(receiver, Text.of(message));
         }
     }
 
     private static void sendACEMessage(CommandSource source, Text message) {
-        source.sendMessage(Texts.of(TextColors.BLUE, "[ACE] ", TextColors.RESET, message));
+        source.sendMessage(Text.of(TextColors.BLUE, "[ACE] ", TextColors.RESET, message));
     }
 }

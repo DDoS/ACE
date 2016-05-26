@@ -13,10 +13,10 @@ version = '0.0.1-SNAPSHOT'
 // Extended project information
 ext.projectName = 'ACE'
 ext.inceptionYear = '2015'
-ext.currentYear = '2015'
+ext.currentYear = '2016'
 ext.packaging = 'jar'
 ext.url = 'http://sapon.ca/JICI'
-ext.description = 'JICI interface for SpongeAPI'
+ext.description = 'A JICI interface for SpongeAPI'
 ext.author = 'Aleksi Sapon'
 
 // Minimum version of Java required
@@ -60,7 +60,7 @@ repositories {
 }
 
 dependencies {
-    compile "org.spongepowered:spongeapi:2.1-SNAPSHOT"
+    compile "org.spongepowered:spongeapi:4.0.3"
     compile "ca.sapon:jici:0.0.1-SNAPSHOT"
 }
 
